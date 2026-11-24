@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Календарь доходов, расходов и платежей по долгам.">
+  <title>Календарь денег</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>Календарь денег</div>
+      <span class="release-version">Тестовая версия 0.1.0</span>
+      <span class="test-badge" id="test-badge"><i aria-hidden="true"></i> Тестовые данные</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="heading">
+      <div>
+        <h1>Календарь денег</h1>
+        <p>Поступления, расходы и прогноз остатка по дням.</p>
+      </div>
+      <div class="opening">
+        <label for="opening">Остаток на 1 ноября</label>
+        <div class="opening-field"><input type="number" id="opening" min="-1000000000" max="1000000000" step="0.01" value="0" aria-describedby="opening-error"><span aria-hidden="true">₽</span></div>
+        <p id="opening-error" class="input-error" hidden>Укажи сумму в рублях и копейках.</p>
+      </div>
+    </div>
+
+    <label class="demo-toggle"><input type="checkbox" id="show-demo"> Показывать тестовый пример</label>
+    <section class="panel current-panel" aria-labelledby="actual-label">
+      <div>
+        <h2 id="actual-label">Сколько денег сейчас</h2>
+        <p class="subtle" id="actual-date"></p>
+        <strong id="actual-amount" aria-live="polite">—</strong>
+      </div>
+      <form id="balance-form" class="current-form">
+        <label for="actual-input" id="actual-input-label">Введи остаток на сегодня</label>
+        <div class="form-actions">
+          <div class="opening-field"><input type="number" id="actual-input" min="-1000000000" max="1000000000" step="0.01" inputmode="decimal" required><span aria-hidden="true">₽</span></div>
+          <button type="submit" class="primary">Сохранить</button>
+        </div>
+        <p id="actual-help" class="subtle">Укажи, сколько сейчас на счетах и наличными. Прогноз продолжится с этой суммы.</p>
+      </form>
+    </section>
+    <p id="save-status" class="status" role="status" hidden></p>
+
+    <section class="panel daily-panel" aria-labelledby="daily-title">
+      <div class="daily-heading">
+        <div>
+          <h2 id="daily-title">Сколько можно потратить сегодня</h2>
+          <p class="subtle">Дополнительно к расходам, уже внесённым в календарь.</p>
+        </div>
+        <span class="daily-cycle-badge">До ближайшего поступления</span>
+      </div>
+      <div class="daily-grid" aria-live="polite">
+        <div>
+          <p class="daily-value"><strong id="daily-amount">—</strong><span>в день</span></p>
+          <p class="subtle" id="daily-range"></p>
+        </div>
+        <div class="daily-explanation">
+          <p id="daily-message"></p>
+          <p class="subtle" id="daily-breakdown" hidden></p>
+          <p class="subtle" id="daily-income"></p>
+          <p class="subtle" id="daily-overdue" hidden></p>
+          <button class="text-button" id="daily-jump" type="button" hidden>Открыть день в календаре</button>
+          <div class="daily-later" id="daily-later" hidden>
+            <p id="daily-later-message"></p>
+            <button class="text-button" id="daily-later-jump" type="button">Открыть будущий платёж</button>
+          </div>
+        </div>
+      </div>
+      <details class="daily-help">
+        <summary>Как считается лимит</summary>
+        <p>Из текущего остатка выделяются деньги на платежи и запланированные траты до ближайшего поступления. Свободная сумма равномерно распределяется на оставшиеся дни, включая сегодня. День поступления относится уже к следующему периоду.</p>
+        <p>Пример: сейчас 1 000 ₽, через 5 дней доход, до него платёж 500 ₽. На дополнительные траты остаётся 500 ₽, то есть 100 ₽ в день. Уже внесённые в календарь расходы повторно вычитать из лимита не нужно.</p>
+        <p>В день поступления отметь получение денег: новый расчёт учтёт фактический остаток и платежи до следующего дохода. Если доход задержится, измени его дату. Если ближайший доход не задан, добавь его в календарь.</p>
+        <p>Также учитывается заданный резерв. Отдельное предупреждение проверяет платежи на 30 дней после ближайшего поступления с учётом трат по текущему лимиту и запланированных доходов.</p>
+      </details>
+    </section>
+
+    <section class="panel backup-panel" aria-labelledby="backup-title">
+      <div>
+        <h2 id="backup-title">Резервная копия и сброс</h2>
+        <p class="subtle">Сохрани файл с записями, чтобы восстановить календарь в другом браузере или на другом устройстве.</p>
+      </div>
+      <div class="form-actions">
+        <button class="secondary" id="export-backup" type="button">Скачать резервную копию</button>
+        <button class="secondary" id="import-backup" type="button">Восстановить из файла</button>
+        <button class="text-button" id="undo-import" type="button" hidden>Вернуть предыдущие данные</button>
+        <button class="text-button danger-text" id="reset-data" type="button">Сбросить все данные</button>
+      </div>
+      <input id="backup-file" type="file" accept=".json,application/json" hidden>
+      <p class="input-error" id="backup-error" role="alert" hidden></p>
+    </section>
+
+    <section class="summary" aria-label="Итоги месяца" aria-live="polite">
+      <div class="summary-card balance-card"><span>Прогноз на конец месяца</span><strong id="closing"></strong></div>
+      <div class="summary-card"><span>Поступления</span><strong id="income" class="income"></strong></div>
+      <div class="summary-card"><span>Расходы и платежи</span><strong id="expenses"></strong></div>
+    </section>
+
+    <section class="panel budget-panel" aria-labelledby="budget-title">
+      <div class="section-head">
+        <h2 id="budget-title">Бюджет на жизнь</h2>
+        <span id="budget-month"></span>
+      </div>
+      <p class="subtle budget-help">Потрачено — отмеченные оплаты. «После плановых трат» учитывает также неоплаченные операции в календаре.</p>
+      <div class="budget-cards" id="budget-cards"></div>
+      <div class="reserve-row">
+        <div>
+          <label for="budget-reserve">Резерв на конец месяца, ₽</label>
+          <p class="subtle">Желаемый остаток денег на конец месяца.</p>
+        </div>
+        <div>
+          <input type="number" id="budget-reserve" min="0" max="1000000000" step="0.01" inputmode="decimal" placeholder="Не задан" data-budget="reserve" aria-describedby="reserve-error">
+          <p class="input-error" id="reserve-error" hidden>Укажи сумму от 0 до 1 000 000 000 ₽ с точностью до копейки.</p>
+        </div>
+        <p id="reserve-status" class="subtle" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <p class="notice" id="incomplete" hidden>Укажи новую дату возврата, чтобы учесть долг в прогнозе.</p>
+
+    <button id="first-gap" type="button" class="notice jump" hidden></button>
+
+    <div class="layout">
+      <section class="panel calendar" aria-labelledby="month-label">
+        <div class="panel-head">
+          <div class="month-nav">
+            <h2 id="month-label"></h2>
+            <div class="arrows">
+              <button id="prev-month" type="button" aria-label="Предыдущий месяц">‹</button>
+              <button id="next-month" type="button" aria-label="Следующий месяц">›</button>
+            </div>
+            <button id="today" class="text-button" type="button">Сегодня</button>
+          </div>
+          <div class="view-control" aria-label="Вид календаря">
+            <button type="button" data-view="grid" aria-pressed="true">Сетка</button>
+            <button type="button" data-view="list" aria-pressed="false">Список</button>
+          </div>
+        </div>
+        <div id="calendar"></div>
+        <div class="legend"><span><b class="payment-marker due" aria-hidden="true">!</b>К оплате</span><span><b class="payment-marker paid" aria-hidden="true">✓</b>Оплачено</span><span><i class="green-dot"></i>Поступление</span><span><i class="red-dot"></i>Нехватка денег</span><span><i class="today-dot"></i>Сегодня</span><span>Суммы на конец дня</span></div>
+      </section>
+
+      <aside class="stack" aria-label="Подробности дня и сценарии">
+        <section class="panel details" aria-labelledby="day-label">
+          <div class="section-head"><h2 id="day-label"></h2><span id="day-weekday"></span></div>
+          <div class="day-balance" aria-live="polite">
+            <span>Прогноз на конец дня</span>
+            <strong id="day-balance"></strong>
+          </div>
+          <div class="day-payment" aria-live="polite">
+            <p class="due" id="day-payment-due" hidden></p>
+            <p class="paid" id="day-payment-paid" hidden></p>
+          </div>
+          <div class="day-actions">
+            <button class="secondary" id="add-expense" type="button">+ Трата</button>
+            <button class="secondary" id="add-income" type="button">+ Доход</button>
+            <button class="secondary" id="add-payment" type="button">+ Обязательный платёж</button>
+            <button class="secondary" id="add-loan" type="button">+ Заём</button>
+          </div>
+          <dl class="operations" id="day-operations"></dl>
+        </section>
+
+        <section class="panel" aria-labelledby="loans-title">
+          <h2 id="loans-title">Мои займы</h2>
+          <p class="subtle" id="loans-empty">Добавь полученную сумму, сумму возврата и условия переноса.</p>
+          <div id="loans-list"></div>
+        </section>
+
+        <section class="panel scenarios" id="demo-debt" aria-labelledby="debt-title">
+          <div class="section-head"><h2 id="debt-title">Долг 40 000 ₽</h2><button class="text-button" id="due-jump" type="button">21 ноября</button></div>
+          <p id="debt-status" class="subtle" hidden></p>
+          <fieldset id="scenario-options">
+            <legend id="scenario-label">Сравни остаток на 21 ноября</legend>
+            <label class="option"><input type="radio" name="scenario" value="pay" checked><span><strong>Вернуть в срок</strong><small id="pay-caption">Платёж 40 000 ₽</small></span><b id="pay-result"></b></label>
+            <label class="option"><input type="radio" name="scenario" value="extend"><span><strong>Перенести</strong><small id="fee-caption">Плата за перенос 10 000 ₽</small></span><b id="extend-result"></b></label>
+          </fieldset>
+          <div class="extension" id="extension" hidden>
+            <label for="extension-date">Новая дата возврата 40 000 ₽</label>
+            <input type="date" id="extension-date" max="9999-12-31" aria-describedby="date-error">
+            <p class="input-error" id="date-error" hidden>Выбери дату позже исходного срока возврата.</p>
+            <button class="text-button" type="button" id="extension-jump" hidden>Открыть день возврата</button>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <dialog id="operation-dialog" aria-labelledby="operation-title">
+    <form id="operation-form">
+      <h2 id="operation-title"></h2>
+      <p id="operation-caption" class="subtle"></p>
+      <div id="edit-fields" class="dialog-fields">
+        <label for="operation-amount">Сумма, ₽</label>
+        <input type="number" id="operation-amount" min="0.01" max="1000000000" step="0.01" inputmode="decimal">
+        <label id="operation-date-label" for="operation-date">Дата по плану</label>
+        <input type="date" id="operation-date" min="1900-01-01" max="9999-12-31">
+      </div>
+      <div id="paid-fields" class="dialog-fields" hidden>
+        <div id="partial-fields" hidden>
+          <label for="paid-amount">Сумма внесённого платежа, ₽</label>
+          <input type="number" id="paid-amount" min="0.01" max="1000000000" step="0.01" inputmode="decimal">
+          <p class="subtle" id="paid-remainder"></p>
+        </div>
+        <label for="paid-date">Фактическая дата</label>
+        <input type="date" id="paid-date" min="1900-01-01">
+        <label id="included-label" class="checkbox-label" hidden><input type="checkbox" id="included-in-balance"> Эта операция уже учтена в сохранённом остатке</label>
+      </div>
+      <div class="form-actions">
+        <button class="primary" type="submit">Сохранить</button>
+        <button class="secondary" id="cancel-operation" type="button">Отмена</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="expense-dialog" aria-labelledby="expense-heading">
+    <form id="expense-form">
+      <h2 id="expense-heading">Добавить трату</h2>
+      <div class="dialog-fields expense-fields">
+        <div id="expense-template-fields">
+        <label for="expense-template">Шаблон траты</label>
+        <select id="expense-template"><option value="">Без шаблона</option></select>
+        </div>
+        <label id="expense-name-label" for="expense-name">На что потратили</label>
+        <input type="text" id="expense-name" maxlength="100" placeholder="Например, зимняя куртка" required autofocus>
+        <div id="expense-category-fields">
+        <label for="expense-category">Категория</label>
+        <select id="expense-category">
+          <option>Одежда</option>
+          <option>Отдых</option>
+          <option>Еда</option>
+          <option>Транспорт</option>
+          <option>Здоровье</option>
+          <option>Дом и быт</option>
+          <option selected>Другое</option>
+        </select>
+        <button class="text-button save-template" id="save-expense-template" type="button">Сохранить название и категорию как шаблон</button>
+        <p class="template-message subtle" id="template-message" role="status" hidden></p>
+        </div>
+        <div class="expense-pair">
+          <div>
+            <label for="expense-amount">Сумма, ₽</label>
+            <input type="number" id="expense-amount" min="0.01" max="1000000000" step="0.01" inputmode="decimal" required>
+          </div>
+          <div>
+            <label id="expense-date-label" for="expense-date">Дата</label>
+            <input type="date" id="expense-date" min="1900-01-01" max="9999-12-31" required>
+          </div>
+        </div>
+        <div id="repeat-fields">
+          <label for="expense-repeat">Повторять</label>
+          <select id="expense-repeat">
+            <option value="once">Один раз</option>
+            <option value="daily">Каждый день</option>
+            <option value="weekly">Каждую неделю</option>
+          </select>
+          <div id="repeat-end-fields" hidden>
+            <label for="expense-repeat-end">Последняя дата, если нужна</label>
+            <input type="date" id="expense-repeat-end" min="1900-01-01" max="9999-12-31">
+            <p class="subtle">Оставь пустой, чтобы повторять без даты окончания. Каждая дата учитывается отдельно.</p>
+          </div>
+        </div>
+        <label for="expense-status">Статус</label>
+        <select id="expense-status">
+          <option value="paid">Уже потратил</option>
+          <option value="planned">В плане</option>
+        </select>
+        <label id="expense-included-label" class="checkbox-label" hidden><input type="checkbox" id="expense-included"> Эта трата уже учтена в сохранённом остатке</label>
+      </div>
+      <div class="form-actions">
+        <button class="primary" type="submit">Сохранить</button>
+        <button class="secondary" id="cancel-expense" type="button">Отмена</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="loan-dialog" aria-labelledby="loan-heading">
+    <form id="loan-form">
+      <h2 id="loan-heading">Добавить заём</h2>
+      <div class="dialog-fields expense-fields">
+        <label for="loan-name">Название</label>
+        <input id="loan-name" type="text" maxlength="100" required placeholder="Например, заём до зарплаты">
+        <div class="expense-pair">
+          <div><label for="loan-received">Получено, ₽</label><input id="loan-received" type="number" min="0.01" max="1000000000" step="0.01" required></div>
+          <div><label for="loan-repay">К возврату, ₽</label><input id="loan-repay" type="number" min="0.01" max="1000000000" step="0.01" required></div>
+        </div>
+        <div class="expense-pair">
+          <div><label for="loan-received-date">Дата получения</label><input id="loan-received-date" type="date" min="1900-01-01" max="9999-12-31" required></div>
+          <div><label for="loan-due-date">Срок возврата</label><input id="loan-due-date" type="date" min="1900-01-01" max="9999-12-31" required></div>
+        </div>
+        <label for="loan-fee">Плата за один перенос, ₽</label>
+        <input id="loan-fee" type="number" min="0" max="1000000000" step="0.01" required>
+        <p class="subtle">Плата за перенос учитывается отдельным расходом. Сумма к возврату уменьшается при погашении займа.</p>
+        <label class="checkbox-label"><input id="loan-received-paid" type="checkbox"> Деньги уже получены</label>
+        <label id="loan-included-label" class="checkbox-label" hidden><input id="loan-included" type="checkbox"> Поступление уже учтено в сохранённом остатке</label>
+      </div>
+      <div class="form-actions"><button class="primary" type="submit">Сохранить</button><button class="secondary" id="cancel-loan" type="button">Отмена</button></div>
+    </form>
+  </dialog>
+  <dialog id="extension-dialog" aria-labelledby="extension-heading">
+    <form id="loan-extension-form">
+      <h2 id="extension-heading">Перенести платёж</h2>
+      <p id="loan-extension-description" class="subtle"></p>
+      <div class="dialog-fields expense-fields">
+        <label for="loan-extension-date">Дата оплаты переноса</label>
+        <input id="loan-extension-date" type="date" min="1900-01-01" required>
+        <label for="loan-extension-fee">Плата за перенос, ₽</label>
+        <input id="loan-extension-fee" type="number" min="0" max="1000000000" step="0.01" required>
+        <label for="loan-new-date">Новый срок возврата</label>
+        <input id="loan-new-date" type="date" max="9999-12-31" required>
+        <label id="extension-included-label" class="checkbox-label" hidden><input id="extension-included" type="checkbox"> Плата уже учтена в сохранённом остатке</label>
+      </div>
+      <div class="form-actions"><button class="primary" type="submit">Записать перенос</button><button class="secondary" id="cancel-extension" type="button">Отмена</button></div>
+    </form>
+  </dialog>
+  <dialog id="restore-dialog" aria-labelledby="restore-title">
+    <h2 id="restore-title">Восстановить календарь</h2>
+    <p class="subtle" id="restore-file-name"></p>
+    <dl id="restore-details" class="restore-details"></dl>
+    <p class="subtle">Данные из файла заменят текущие записи. После восстановления можно отменить замену кнопкой «Вернуть предыдущие данные».</p>
+    <div class="form-actions">
+      <button class="primary" id="confirm-restore" type="button">Восстановить данные</button>
+      <button class="secondary" id="cancel-restore" type="button">Отмена</button>
+    </div>
+  </dialog>
+  <dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
+    <h2 id="reset-title">Сбросить все данные?</h2>
+    <p class="subtle" id="reset-description"></p>
+    <p class="subtle">Предыдущий набор записей сохранится в этом браузере. Кнопка «Вернуть предыдущие данные» позволит отменить замену даже после обновления страницы. Хранится один предыдущий набор.</p>
+    <p class="input-error" id="reset-error" role="alert" hidden></p>
+    <div class="form-actions">
+      <button class="secondary" id="cancel-reset" type="button" autofocus>Отмена</button>
+      <button class="primary danger-button" id="confirm-reset" type="button">Сбросить данные</button>
+    </div>
+  </dialog>
+  <footer class="wrap testing-footer">
+    <div><strong>Помоги улучшить календарь</strong><p>Тестовая версия 0.1.0 · Записи сохраняются только в твоём браузере.</p></div>
+    <div class="form-actions">
+      <a class="secondary" href="https://github.com/Chumarov00/kalendar-deneg/issues/new?template=bug_report.yml" target="_blank" rel="noopener noreferrer">Сообщить об ошибке</a>
+      <a class="secondary" href="https://github.com/Chumarov00/kalendar-deneg/issues/new?template=feature_request.yml" target="_blank" rel="noopener noreferrer">Предложить улучшение</a>
+    </div>
+    <p>Для отправки нужен аккаунт GitHub. Опиши действия, ожидаемый результат и результат на экране. Укажи телефон и браузер. Обращения публичные: используй примерные суммы и скрывай личные данные на скриншотах.</p>
+  </footer>
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>
