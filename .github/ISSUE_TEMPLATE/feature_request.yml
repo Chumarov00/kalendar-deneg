@@ -1,0 +1,21 @@
+name: Предложить улучшение
+description: Расскажите, чего не хватает или что неудобно
+title: "[Идея] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Что сейчас неудобно
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Что предлагаете изменить
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Устройство и браузер
