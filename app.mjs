@@ -1,4 +1,5 @@
 import { backupCounts, createBackup, parseBackup, planData, writeRestoredPlan } from './backup.mjs';
+import { canDeleteOperation, removeCustomOperation } from './operations.mjs';
 import {
   actualBalance, amountIsValid, dateAt, dateIsValid, daysInMonth, debtIds, debtTerms, firstMonth,
   forecast, localDate, lockedScenario, maxDate, minDate, money, nextDay, scheduleFor, shiftMonth,
@@ -193,6 +194,7 @@ function renderDetails(record) {
     const value = appendText(row, 'dd', '', item.amount > 0 ? 'income' : '');
     applyMoney(value, amount, true);
     const actions = appendText(row, 'dd', '', 'operation-actions');
+    if (canDeleteOperation(item)) operationButton(actions, 'Удалить', 'delete', item);
     if (item.cancelled) {
       operationButton(actions, 'Восстановить покупку', 'restore-purchase', item);
       continue;
@@ -712,6 +714,11 @@ byId('day-operations').addEventListener('click', (event) => {
   const item = scheduleFor(state).find(({ id }) => id === button.dataset.operation);
   if (!item) return;
   const action = button.dataset.action;
+  if (action === 'delete') {
+    syncToday();
+    openReplacement('delete', item);
+    return;
+  }
   if (action === 'cancel-purchase' || action === 'restore-purchase') {
     syncToday();
     const cancelled = action === 'cancel-purchase';
@@ -1164,7 +1171,7 @@ byId('confirm-restore').addEventListener('click', () => {
   showLoadedPlan(backup.data, 'Данные восстановлены из файла.');
 });
 
-function openReplacement(mode) {
+function openReplacement(mode, item = null) {
   if (readingBackup) return;
   backupError();
   try {
@@ -1181,17 +1188,32 @@ function openReplacement(mode) {
     }
     const previous = window.localStorage.getItem(rollbackKey);
     if (mode === 'undo' && !previous) return;
+    const data = mode === 'delete' ? removeCustomOperation(state, item.id)
+      : mode === 'reset' ? emptyPlan : parseBackup(previous).data;
     // Capture both browser and in-memory data so a pending confirmation cannot overwrite newer edits.
     pendingReplacement = {
       mode, savedRaw, current, previous,
-      data: mode === 'reset' ? emptyPlan : parseBackup(previous).data,
+      data,
     };
-    byId('reset-title').textContent = mode === 'reset' ? 'Сбросить все данные?' : 'Вернуть предыдущие данные?';
-    byId('reset-description').textContent = mode === 'reset'
+    byId('reset-title').textContent = mode === 'delete' ? 'Удалить операцию?'
+      : mode === 'reset' ? 'Сбросить все данные?' : 'Вернуть предыдущие данные?';
+    let description = mode === 'reset'
       ? 'Очистятся операции за все даты, займы, оплаты, шаблоны, бюджеты и введённый остаток. Откроется пустой календарь на сегодня с нулевым прогнозом. Тестовый пример будет выключен.'
-      : 'Текущий календарь будет заменён набором записей, который был до последнего сброса или восстановления из файла.';
-    byId('confirm-reset').textContent = mode === 'reset' ? 'Сбросить данные' : 'Вернуть данные';
-    byId('confirm-reset').classList.toggle('danger-button', mode === 'reset');
+      : 'Текущий календарь будет заменён набором записей, который был до последнего удаления операции, сброса или восстановления из файла. Изменения, внесённые после этого, тоже будут отменены.';
+    if (mode === 'delete') {
+      description = '«' + item.title + '» · ' + dailyDate(item.date) + ' · ' + money(Math.abs(item.amount))
+        + '. Запись исчезнет из календаря. Прогноз и дневной лимит пересчитаются.';
+      if (item.paidAmount) {
+        description += ' Отметки оплаты или получения тоже удалятся.';
+        const before = actualBalance(state, today);
+        const after = actualBalance(data, today);
+        if (before !== null && before !== after) description += ' Расчётный остаток: ' + money(before) + ' → ' + money(after) + '.';
+        else description += ' Оплата уже учтена во введённом остатке. Если отметка была ошибочной, проверь «Сколько сейчас есть».';
+      }
+    }
+    byId('reset-description').textContent = description;
+    byId('confirm-reset').textContent = mode === 'delete' ? 'Удалить операцию' : mode === 'reset' ? 'Сбросить данные' : 'Вернуть данные';
+    byId('confirm-reset').classList.toggle('danger-button', mode !== 'undo');
     byId('reset-error').hidden = true;
     resetDialog.showModal();
   } catch (error) {
@@ -1216,7 +1238,7 @@ byId('confirm-reset').addEventListener('click', () => {
       || window.localStorage.getItem(rollbackKey) !== previous) {
       throw new Error('Данные изменились. Закрой это окно и обнови страницу, затем повтори действие.');
     }
-    // Use the same durable backup-first write for reset and undo. Undo itself is reversible.
+    // Save recovery data before deletion/reset/undo; a failed write leaves the plan intact.
     writeRestoredPlan(window.localStorage, storageKey, rollbackKey, state, data);
   } catch (error) {
     byId('reset-error').textContent = 'Замена не выполнена. ' + (error.name === 'QuotaExceededError'
@@ -1226,7 +1248,9 @@ byId('confirm-reset').addEventListener('click', () => {
   }
   resetDialog.close();
   syncToday();
-  showLoadedPlan(data, mode === 'reset'
+  showLoadedPlan(data, mode === 'delete'
+    ? 'Операция удалена. Прогноз и дневной лимит пересчитаны. Можно нажать «Вернуть предыдущие данные».'
+    : mode === 'reset'
     ? 'Данные сброшены. Можно начать новый тест или нажать «Вернуть предыдущие данные».'
     : 'Предыдущие данные возвращены. Заменённый набор тоже можно вернуть этой кнопкой.');
   byId(mode === 'reset' ? 'reset-data' : 'undo-import').focus();
