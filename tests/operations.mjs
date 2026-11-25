@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { actualBalance, forecast, incomeCycleAllowance, scheduleFor, setPurchaseCancelled } from '../model.mjs';
 import { createBackup, parseBackup, planData, writeRestoredPlan } from '../backup.mjs';
-import { canDeleteOperation, removeCustomOperation } from '../operations.mjs';
+import { canDeleteOperation, removeCustomOperation, removeLoan } from '../operations.mjs';
 
 const today = '2026-11-24';
 const make = () => planData({ showDemo: false,
@@ -93,4 +93,67 @@ const failed = { ...storage, setItem(k,v) { if (k === 'plan') throw new Error('S
 const saved = storage.getItem('plan'), undo = storage.getItem('undo');
 throws(() => writeRestoredPlan(failed, 'plan', 'undo', before, after));
 eq(storage.getItem('plan'), saved); eq(storage.getItem('undo'), undo);
-console.log(checks + ' проверок удаления и восстановления пройдены.');
+
+// A loan is one unit: received cash, repayment, parts and fees must disappear together.
+const withLoan = () => {
+  const state = make();
+  state.customExpenses = state.customExpenses.filter(x => x.id !== 'bill');
+  state.loans = [{ id: 'loan-a', title: 'Заём', received: 1000, repay: 1200, fee: 200,
+    receivedDate: today, dueDate: '2026-11-26', extensions: [] }];
+  state.payments['loan-a/in'] = today;
+  return state;
+};
+before = withLoan();
+const loanOriginal = JSON.stringify(before);
+eq(actualBalance(before, today), 2000);
+eq(incomeCycleAllowance(before, today).amount, 160);
+after = removeLoan(before, 'loan-a');
+eq(after.loans, []); eq(after.payments, {});
+eq(actualBalance(after, today), 1000);
+eq(incomeCycleAllowance(after, today).amount, 200);
+eq(JSON.stringify(before), loanOriginal);
+eq(forecast(after, '2026-11').ledger.get('2026-11-26').payment, undefined);
+eq(parseBackup(JSON.stringify(createBackup(after))).data, after);
+throws(() => removeLoan(before, 'missing'));
+
+before = withLoan();
+before.loans[0].extensions = [
+  { id: 'extension-1', date: today, newDate: '2026-12-01', fee: 200 },
+  { id: 'extension-2', date: today, newDate: '2026-12-03', fee: 0 },
+];
+before.payments['extension-1'] = today;
+before.installments['loan-a/out'] = [{ id: 'loan-part', date: today, amount: 100 }];
+before.edits['loan-a/out'] = { date: '2026-12-03', amount: -1200 };
+// Similar IDs must never delete a different loan or an ordinary transaction.
+before.loans.push({ id: 'loan-a-other', title: 'Другой заём', received: 50, repay: 60, fee: 0,
+  receivedDate: today, dueDate: '2026-11-28', extensions: [] });
+before.payments['loan-a-other/in'] = today;
+before.budgets = { '2026-11': { reserve: 50 } };
+eq(actualBalance(before, today), 1750);
+after = removeLoan(before, 'loan-a');
+eq(after.loans.map(x => x.id), ['loan-a-other']);
+eq(after.payments, { 'loan-a-other/in': today });
+eq(after.installments, {}); eq(after.edits, {});
+eq(after.customExpenses, before.customExpenses);
+eq(after.budgets, before.budgets); eq(after.expenseTemplates, before.expenseTemplates);
+eq(actualBalance(after, today), 1050);
+eq(scheduleFor(after).some(x => x.loanId === 'loan-a'), false);
+eq(parseBackup(JSON.stringify(createBackup(after))).data, after);
+
+// Never rewrite the user's real manual cash checkpoint when deleting older records.
+before.snapshot = { date: today, amount: 1750, paidIds: ['loan-a/in', 'extension-1', 'loan-part', 'loan-a-other/in'] };
+after = removeLoan(before, 'loan-a');
+eq(after.snapshot, { date: today, amount: 1750, paidIds: ['loan-a-other/in'] });
+eq(actualBalance(after, today), 1750);
+writeRestoredPlan(storage, 'plan', 'undo', before, after);
+const loanRecovery = parseBackup(storage.getItem('undo')).data;
+eq(loanRecovery, before);
+writeRestoredPlan(storage, 'plan', 'undo', after, loanRecovery);
+eq(JSON.parse(storage.getItem('plan')), before);
+eq(parseBackup(storage.getItem('undo')).data, after);
+// A fully repaid loan and a planned receipt also remain deletable.
+before = withLoan(); before.payments['loan-a/out'] = today;
+eq(actualBalance(removeLoan(before, 'loan-a'), today), 1000);
+before = withLoan(); delete before.payments['loan-a/in']; before.snapshot = null;
+eq(removeLoan(before, 'loan-a').snapshot, null);
+console.log(checks + ' проверок удаления операций, займов и восстановления пройдены.');

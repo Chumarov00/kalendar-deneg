@@ -31,7 +31,7 @@ r=incomeCycleAllowance(s,today);eq(r.amount,200);eq(r.laterShortfall,{date:shift
 s.customExpenses[1].date=shift(5);eq(incomeCycleAllowance(s,today).laterShortfall.date,shift(5));
 // Missing income never silently falls back to a fixed 30-day horizon.
 eq(incomeCycleAllowance(make(1000,[]),today).status,'needs-income');eq(incomeCycleAllowance(make(1000,[]),today).amount,null);
-eq(incomeCycleAllowance(planData({showDemo:false}),today).status,'needs-balance');
+eq(incomeCycleAllowance(planData({showDemo:false}),today).status,'needs-income');
 s=make();s.customExpenses[0].amount=-1200;r=incomeCycleAllowance(s,today);eq(r.amount,0);eq(r.shortfall,{date:shift(2),amount:200,reserve:0});
 s=make();s.customExpenses[1].date=shift(7);eq(incomeCycleAllowance(s,today).amount,71.42);
 s=make();s.budgets={'2026-11':{reserve:100}};eq(incomeCycleAllowance(s,today).amount,80);

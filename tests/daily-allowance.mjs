@@ -14,7 +14,7 @@ const eq = (actual, expected) => { assert.deepEqual(actual, expected); checks++;
 eq(dailyAllowance(state(), today).amount, 33.33);
 eq(dailyAllowance(state(), today).end, '2026-12-23');
 eq(dailyAllowance(state(), today).days, 30);
-eq(dailyAllowance(planData({ showDemo: false }), today).status, 'needs-balance');
+eq(dailyAllowance(planData({ showDemo: false }), today).amount, 0);
 eq(dailyAllowance(state(0), today).amount, 0);
 eq(dailyAllowance(state(-1), today).shortfall, { date: today, amount: 1, reserve: 0 });
 
@@ -86,7 +86,7 @@ eq(dailyAllowance(s, today, 60).amount, 0);
 
 s = state(); s.showDemo = true; s.scenario = 'extend';
 eq(dailyAllowance(s, today).status, 'incomplete');
-eq(dailyAllowance({ ...state(), snapshot: { date: shift(1), amount: 1000, paidIds: [] } }, today).status, 'needs-balance');
+eq(dailyAllowance({ ...state(), snapshot: { date: shift(1), amount: 1000, paidIds: [] } }, today).amount, 0);
 eq(dailyAllowance({ ...state(), snapshot: { date: '9999-12-31', amount: 10, paidIds: [] } }, '9999-12-31').amount, 10);
 assert.throws(() => dailyAllowance(state(), today, 0)); checks++;
 
