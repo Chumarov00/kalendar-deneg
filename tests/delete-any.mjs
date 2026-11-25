@@ -73,8 +73,8 @@ before.month='2027-02';
 for(const item of scheduleFor(before,undefined,'2027-01')) before=removeOperation(before,item.id);
 eq(incomeCycleAllowance(before,today).nextIncome.date,'2027-02-02');
 // Old v1-v3 copies remain readable and get an empty deletion map.
-for(const version of [1,2,3]) {
-  const copy=createBackup(make());copy.schemaVersion=version;delete copy.data.deletedOperations;
+for(const version of [1,2,3,4]) {
+  const copy=createBackup(make());copy.schemaVersion=version;if(version<4)delete copy.data.deletedOperations;
   if(version<3){delete copy.data.cancellations;delete copy.data.operationChanges;}
   if(version===1)delete copy.data.budgets;
   eq(parseBackup(JSON.stringify(copy)).data.deletedOperations,{});

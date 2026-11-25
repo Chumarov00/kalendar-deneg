@@ -18,6 +18,16 @@ eq(dailyAllowance(planData({ showDemo: false }), today).amount, 0);
 eq(dailyAllowance(state(0), today).amount, 0);
 eq(dailyAllowance(state(-1), today).shortfall, { date: today, amount: 1, reserve: 0 });
 
+// A later bill after payday must constrain today's limit across the whole period.
+const fullPeriod = state(1000, [op('first-bill', -500, 2, { mandatory: true }),
+  op('income', 1000, 5), op('later-bill', -1000, 10, { mandatory: true })]);
+eq(dailyAllowance(fullPeriod, today, 30).amount, 16.66);
+eq(dailyAllowance(fullPeriod, today, 60).amount, 8.33);
+eq(dailyAllowance(fullPeriod, today, 90).amount, 5.55);
+const alreadyShort = state(1000, [op('income', 1000, 5), op('later-bill', -2500, 10, { mandatory: true })]);
+eq(dailyAllowance(alreadyShort, today, 30).amount, 0);
+eq(dailyAllowance(alreadyShort, today, 30).shortfall, { date: shift(10), amount: 500, reserve: 0 });
+
 // A payment before payday is the limiting date even when the total month is positive.
 let s = state(1000, [op('bill', -900, 4, { mandatory: true }), op('salary', 3000, 9)]);
 eq(dailyAllowance(s, today).amount, 11.11);
