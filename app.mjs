@@ -1,10 +1,10 @@
-import { backupCounts, createBackup, parseBackup, planData, writeRestoredPlan } from './backup.mjs';
-import { canDeleteOperation, removeCustomOperation, removeLoan } from './operations.mjs?v=0.1.2';
+import { backupCounts, createBackup, parseBackup, planData, writeRestoredPlan } from './backup.mjs?v=0.1.3';
+import { canDeleteOperation, removeCustomOperation, removeLoan } from './operations.mjs?v=0.1.3';
 import {
   actualBalance, amountIsValid, dateAt, dateIsValid, daysInMonth, debtIds, debtTerms, firstMonth,
   forecast, localDate, lockedScenario, maxDate, minDate, money, nextDay, scheduleFor, shiftMonth,
   utc, validExtensionDate, cents, loanDueDate, budgetCategories, monthlyBudget, cashEntries, canCancelPurchase, setPurchaseCancelled, incomeCycleAllowance,
-} from './model.mjs';
+} from './model.mjs?v=0.1.3';
 
 const byId = (id) => document.getElementById(id);
 const monthName = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -421,11 +421,11 @@ byId('daily-later-jump').addEventListener('click', (event) => selectDay(event.cu
 function renderActual() {
   const actual = actualBalance(state, today);
   const amount = byId('actual-amount');
-  const expected = state.snapshot
+  const expected = state.snapshot?.date <= today
     ? 'Последний ввод · ' + dayName.format(utc(state.snapshot.date)) + ' ' + utc(state.snapshot.date).getUTCFullYear()
-    : 'Остаток ещё не введён';
+    : 'Рассчитано по начальной сумме и отмеченным поступлениям и оплатам';
   byId('actual-date').textContent = expected;
-  byId('actual-input-label').textContent = 'Остаток на сегодня, ' + dayName.format(utc(today));
+  byId('actual-input-label').textContent = 'Уточнить остаток на сегодня, ' + dayName.format(utc(today)) + ' · необязательно';
   if (actual === null) {
     amount.textContent = '—';
     amount.classList.remove('negative');

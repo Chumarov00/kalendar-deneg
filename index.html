@@ -11,7 +11,7 @@
   <header class="topbar">
     <div class="wrap topbar-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>Календарь денег</div>
-      <span class="release-version">Тестовая версия 0.1.2</span>
+      <span class="release-version">Тестовая версия 0.1.3</span>
       <span class="test-badge" id="test-badge"><i aria-hidden="true"></i> Тестовые данные</span>
     </div>
   </header>
@@ -37,12 +37,12 @@
         <strong id="actual-amount" aria-live="polite">—</strong>
       </div>
       <form id="balance-form" class="current-form">
-        <label for="actual-input" id="actual-input-label">Введи остаток на сегодня</label>
+        <label for="actual-input" id="actual-input-label">Уточнить остаток на сегодня · необязательно</label>
         <div class="form-actions">
           <div class="opening-field"><input type="number" id="actual-input" min="-1000000000" max="1000000000" step="0.01" inputmode="decimal" required><span aria-hidden="true">₽</span></div>
           <button type="submit" class="primary">Сохранить</button>
         </div>
-        <p id="actual-help" class="subtle">Укажи, сколько сейчас на счетах и наличными. Прогноз продолжится с этой суммы.</p>
+        <p id="actual-help" class="subtle">Расчёт работает по календарю без ручного ввода. Если сумма отличается от денег на счетах и наличными, укажи фактический остаток — дальнейший расчёт продолжится с него. Доходы отмечай как полученные, а расходы — как оплаченные.</p>
       </form>
     </section>
     <p id="save-status" class="status" role="status" hidden></p>
@@ -336,13 +336,13 @@
     </div>
   </dialog>
   <footer class="wrap testing-footer">
-    <div><strong>Помоги улучшить календарь</strong><p>Тестовая версия 0.1.2 · Записи сохраняются только в твоём браузере.</p></div>
+    <div><strong>Помоги улучшить календарь</strong><p>Тестовая версия 0.1.3 · Записи сохраняются только в твоём браузере.</p></div>
     <div class="form-actions">
       <a class="secondary" href="https://github.com/Chumarov00/kalendar-deneg/issues/new?template=bug_report.yml" target="_blank" rel="noopener noreferrer">Сообщить об ошибке</a>
       <a class="secondary" href="https://github.com/Chumarov00/kalendar-deneg/issues/new?template=feature_request.yml" target="_blank" rel="noopener noreferrer">Предложить улучшение</a>
     </div>
     <p>Для отправки нужен аккаунт GitHub. Опиши действия, ожидаемый результат и результат на экране. Укажи телефон и браузер. Обращения публичные: используй примерные суммы и скрывай личные данные на скриншотах.</p>
   </footer>
-  <script type="module" src="./app.mjs?v=0.1.2"></script>
+  <script type="module" src="./app.mjs?v=0.1.3"></script>
 </body>
 </html>

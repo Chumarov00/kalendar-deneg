@@ -1,5 +1,5 @@
-import { scheduleFor } from './model.mjs';
-import { planData, validatePlan } from './backup.mjs';
+import { scheduleFor } from './model.mjs?v=0.1.3';
+import { planData, validatePlan } from './backup.mjs?v=0.1.3';
 
 export function canDeleteOperation(item) {
   return Boolean(item?.custom && !item.seriesId && !item.loanId);

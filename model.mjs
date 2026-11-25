@@ -227,12 +227,13 @@ function includedInSnapshot(entry, snapshot) {
 }
 
 export function actualBalance(state, today) {
-  const { snapshot } = state;
-  if (!snapshot || snapshot.date > today) return null;
-  let balance = cents(snapshot.amount);
+  // A manual checkpoint is optional. Without one, derive cash from the opening
+  // amount and confirmed calendar entries; expected income is not cash yet.
+  const snapshot = state.snapshot?.date <= today ? state.snapshot : null;
+  let balance = cents(snapshot ? snapshot.amount : state.opening ?? 0);
   for (const item of scheduleFor(state, undefined, today.slice(0, 7))) {
     for (const entry of cashEntries(item)) {
-      if (entry.date <= today && !includedInSnapshot(entry, snapshot)) {
+      if (entry.date <= today && (!snapshot || !includedInSnapshot(entry, snapshot))) {
         balance += cents(entry.amount);
       }
     }

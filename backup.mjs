@@ -1,4 +1,4 @@
-import { amountIsValid, cents, dateIsValid, debt, debtIds, scheduleFor, utc, budgetCategories } from './model.mjs';
+import { amountIsValid, cents, dateIsValid, debt, debtIds, scheduleFor, utc, budgetCategories } from './model.mjs?v=0.1.3';
 
 export const backupApp = 'kalendar-deneg';
 export const backupVersion = 3;
