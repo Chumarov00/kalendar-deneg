@@ -7,3 +7,4 @@ node tests/daily-allowance.mjs
 node tests/income-cycle.mjs
 node tests/operations.mjs
 node tests/automatic-balance.mjs
+node tests/delete-any.mjs

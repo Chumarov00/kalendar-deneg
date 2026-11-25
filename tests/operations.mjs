@@ -73,8 +73,8 @@ eq(removeCustomOperation(before, 'bill').snapshot, null);
 throws(() => removeCustomOperation(make(), 'missing'));
 before = make(); before.customExpenses[0].repeat = 'daily';
 throws(() => removeCustomOperation(before, 'bill'));
-eq(canDeleteOperation(scheduleFor(before).find(x => x.id === 'bill')), false);
-eq(canDeleteOperation({ id: 'loan/out', loanId: 'loan' }), false);
+eq(canDeleteOperation(scheduleFor(before).find(x => x.id === 'bill')), true);
+eq(canDeleteOperation({ id: 'loan/out', loanId: 'loan' }), true);
 before = planData({ showDemo: true });
 throws(() => removeCustomOperation(before, scheduleFor(before)[0].id));
 
