@@ -11,7 +11,7 @@
   <header class="topbar">
     <div class="wrap topbar-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>Календарь денег</div>
-      <span class="release-version">Тестовая версия 0.1.3</span>
+      <span class="release-version">Тестовая версия 0.1.4</span>
       <span class="test-badge" id="test-badge"><i aria-hidden="true"></i> Тестовые данные</span>
     </div>
   </header>
@@ -328,6 +328,13 @@
   <dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
     <h2 id="reset-title">Сбросить все данные?</h2>
     <p class="subtle" id="reset-description"></p>
+    <div id="delete-scope-fields" hidden>
+      <label for="delete-scope">Что удалить</label>
+      <select id="delete-scope">
+        <option value="once">Только эту дату</option>
+        <option value="series">Всю серию за все даты</option>
+      </select>
+    </div>
     <p class="subtle">Предыдущий набор записей сохранится в этом браузере. Кнопка «Вернуть предыдущие данные» позволит отменить замену даже после обновления страницы. Хранится один предыдущий набор.</p>
     <p class="input-error" id="reset-error" role="alert" hidden></p>
     <div class="form-actions">
@@ -336,13 +343,13 @@
     </div>
   </dialog>
   <footer class="wrap testing-footer">
-    <div><strong>Помоги улучшить календарь</strong><p>Тестовая версия 0.1.3 · Записи сохраняются только в твоём браузере.</p></div>
+    <div><strong>Помоги улучшить календарь</strong><p>Тестовая версия 0.1.4 · Записи сохраняются только в твоём браузере.</p></div>
     <div class="form-actions">
       <a class="secondary" href="https://github.com/Chumarov00/kalendar-deneg/issues/new?template=bug_report.yml" target="_blank" rel="noopener noreferrer">Сообщить об ошибке</a>
       <a class="secondary" href="https://github.com/Chumarov00/kalendar-deneg/issues/new?template=feature_request.yml" target="_blank" rel="noopener noreferrer">Предложить улучшение</a>
     </div>
     <p>Для отправки нужен аккаунт GitHub. Опиши действия, ожидаемый результат и результат на экране. Укажи телефон и браузер. Обращения публичные: используй примерные суммы и скрывай личные данные на скриншотах.</p>
   </footer>
-  <script type="module" src="./app.mjs?v=0.1.3"></script>
+  <script type="module" src="./app.mjs?v=0.1.4"></script>
 </body>
 </html>

@@ -130,7 +130,7 @@ export function paymentInfo(state, item) {
   return { settlements, paidAmount: paidCents / 100, remaining, paidOn };
 }
 
-export function scheduleFor(state, scenario = lockedScenario(state) || state.scenario, throughMonth = state.month ?? localDate().slice(0, 7)) {
+export function scheduleFor(state, scenario = lockedScenario(state) || state.scenario, throughMonth = state.month ?? localDate().slice(0, 7), includeDeleted = false) {
   const terms = debtTerms(state);
   const records = state.showDemo === false ? []
     : regularOperations.map((item) => ({ ...item, ...state.edits?.[item.id] }));
@@ -190,7 +190,7 @@ export function scheduleFor(state, scenario = lockedScenario(state) || state.sce
       }
     }
   }
-  return records.map((item) => ({
+  return records.filter((item) => includeDeleted || !state.deletedOperations?.[item.id]).map((item) => ({
     ...item, ...paymentInfo(state, item), cancelled: Boolean(state.cancellations?.[item.id]),
     corrections: (state.operationChanges ?? []).filter(({ operationId }) => operationId === item.id),
   }));
@@ -327,10 +327,28 @@ export function incomeCycleAllowance(state, today) {
   const records = scheduleFor(state, undefined, through.slice(0, 7));
   const known = new Set(records.map(({ id }) => id));
   for (const source of state.customExpenses ?? []) {
-    if (known.has(source.id) || source.amount <= 0) continue;
-    // A repeating income may start farther in the future than the search window.
-    const item = { ...source, ...state.edits?.[source.id] };
-    records.push({ ...item, ...paymentInfo(state, item), corrections: [] });
+    if (source.amount <= 0 || !['daily', 'weekly'].includes(source.repeat)) continue;
+    // All nearby income dates may have been deleted. Find the next surviving
+    // repeat beyond the generated window, including a series that starts later.
+    const step = source.repeat === 'weekly' ? 7 : 1;
+    const generatedEnd = dateAt(through.slice(0, 7), daysInMonth(through.slice(0, 7)));
+    const cursor = utc(source.date);
+    if (source.date <= generatedEnd) {
+      const elapsed = Math.floor((utc(generatedEnd) - cursor) / 86400000);
+      cursor.setUTCDate(cursor.getUTCDate() + (Math.floor(elapsed / step) + 1) * step);
+    }
+    while (cursor.getUTCFullYear() <= 9999) {
+      const date = iso(cursor);
+      if (source.repeatEnd && date > source.repeatEnd) break;
+      const id = date === source.date ? source.id : source.id + '@' + date;
+      const item = { ...source, date, id, ...state.edits?.[id] };
+      const payment = paymentInfo(state, item);
+      if (!state.deletedOperations?.[id] && payment.remaining) {
+        if (!known.has(id)) records.push({ ...item, ...payment, corrections: [] });
+        break;
+      }
+      cursor.setUTCDate(cursor.getUTCDate() + step);
+    }
   }
   const incomeDates = new Map();
   function add(date, amount) {

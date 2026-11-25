@@ -1,10 +1,10 @@
-import { backupCounts, createBackup, parseBackup, planData, writeRestoredPlan } from './backup.mjs?v=0.1.3';
-import { canDeleteOperation, removeCustomOperation, removeLoan } from './operations.mjs?v=0.1.3';
+import { backupCounts, createBackup, parseBackup, planData, writeRestoredPlan } from './backup.mjs?v=0.1.4';
+import { canDeleteOperation, removeOperation, removeLoan } from './operations.mjs?v=0.1.4';
 import {
   actualBalance, amountIsValid, dateAt, dateIsValid, daysInMonth, debtIds, debtTerms, firstMonth,
   forecast, localDate, lockedScenario, maxDate, minDate, money, nextDay, scheduleFor, shiftMonth,
   utc, validExtensionDate, cents, loanDueDate, budgetCategories, monthlyBudget, cashEntries, canCancelPurchase, setPurchaseCancelled, incomeCycleAllowance,
-} from './model.mjs?v=0.1.3';
+} from './model.mjs?v=0.1.4';
 
 const byId = (id) => document.getElementById(id);
 const monthName = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -54,7 +54,7 @@ function loadSavedPlan() {
 }
 
 const state = {
-  opening: 0, scenario: 'pay', extensionDate: '', edits: {}, payments: {}, debtTerms: {}, snapshot: null, customExpenses: [], expenseTemplates: [], showDemo: false, installments: {}, loans: [], budgets: {}, cancellations: {}, operationChanges: [],
+  opening: 0, scenario: 'pay', extensionDate: '', edits: {}, payments: {}, debtTerms: {}, snapshot: null, customExpenses: [], expenseTemplates: [], showDemo: false, installments: {}, loans: [], budgets: {}, cancellations: {}, operationChanges: [], deletedOperations: {},
   ...loadSavedPlan(), month: today.slice(0, 7), selected: today, view: 'grid',
 };
 
@@ -230,13 +230,15 @@ function renderLoans() {
   const list = byId('loans-list');
   list.replaceChildren();
   byId('loans-empty').hidden = state.loans.length > 0;
-  const schedule = scheduleFor(state);
+  const schedule = scheduleFor(state, undefined, undefined, true);
   for (const loan of state.loans) {
     const repayment = schedule.find(({ id }) => id === loan.id + '/out');
+    const repaymentDeleted = Boolean(state.deletedOperations[repayment.id]);
     const card = appendText(list, 'article', '', 'loan-card');
     appendText(card, 'h3', loan.title);
     appendText(card, 'p', 'Получено ' + money(loan.received) + ' · к возврату ' + money(loan.repay), 'subtle');
-    appendText(card, 'p', repayment.remaining ? 'Осталось ' + money(repayment.remaining) : 'Заём погашен', 'loan-remaining');
+    appendText(card, 'p', repaymentDeleted ? 'Возврат удалён из календаря' : repayment.remaining ? 'Осталось ' + money(repayment.remaining) : 'Заём погашен', 'loan-remaining');
+    if (state.deletedOperations[loan.id + '/in']) appendText(card, 'p', 'Поступление удалено из календаря', 'subtle');
     appendText(card, 'p', 'Срок ' + dayName.format(utc(loanDueDate(loan))) + ' ' + utc(loanDueDate(loan)).getUTCFullYear(), 'subtle');
     const buttons = appendText(card, 'div', '', 'form-actions');
     const jump = appendText(buttons, 'button', 'Открыть дату', 'text-button');
@@ -246,7 +248,7 @@ function renderLoans() {
     remove.type = 'button';
     remove.setAttribute('aria-label', 'Удалить заём — ' + loan.title);
     remove.addEventListener('click', () => { syncToday(); openReplacement('delete-loan', loan); });
-    if (repayment.remaining) {
+    if (repayment.remaining && !repaymentDeleted) {
       const pay = appendText(buttons, 'button', 'Внести платёж', 'text-button');
       pay.type = 'button';
       pay.addEventListener('click', () => openOperation(repayment, 'paid', pay));
@@ -256,7 +258,7 @@ function renderLoans() {
       extend.addEventListener('click', () => openLoanExtension(loan));
     }
     for (const extension of loan.extensions ?? []) {
-      appendText(card, 'p', 'Перенос от ' + dayName.format(utc(extension.date)) + ' · ' + money(extension.fee) + ' · новый срок ' + dayName.format(utc(extension.newDate)), 'subtle');
+      appendText(card, 'p', 'Перенос от ' + dayName.format(utc(extension.date)) + ' · ' + money(extension.fee) + (state.deletedOperations[extension.id] ? ' (плата удалена)' : '') + ' · новый срок ' + dayName.format(utc(extension.newDate)), 'subtle');
     }
     const last = loan.extensions?.at(-1);
     if (last) {
@@ -264,6 +266,7 @@ function renderLoans() {
       cancel.type = 'button';
       cancel.addEventListener('click', () => {
         loan.extensions.pop();
+        delete state.deletedOperations[last.id];
         updatePayment(last.id, '');
         persist('Запись переноса отменена, прежний срок восстановлен.');
         render();
@@ -1179,7 +1182,7 @@ byId('confirm-restore').addEventListener('click', () => {
   showLoadedPlan(backup.data, 'Данные восстановлены из файла.');
 });
 
-function openReplacement(mode, item = null) {
+function openReplacement(mode, item = null, scope = 'once') {
   if (readingBackup) return;
   backupError();
   try {
@@ -1197,13 +1200,15 @@ function openReplacement(mode, item = null) {
     const previous = window.localStorage.getItem(rollbackKey);
     if (mode === 'undo' && !previous) return;
     const deletingLoan = mode === 'delete-loan';
-    const data = deletingLoan ? removeLoan(state, item.id) : mode === 'delete' ? removeCustomOperation(state, item.id)
+    const data = deletingLoan ? removeLoan(state, item.id) : mode === 'delete' ? removeOperation(state, item.id, scope)
       : mode === 'reset' ? emptyPlan : parseBackup(previous).data;
     // Capture both browser and in-memory data so a pending confirmation cannot overwrite newer edits.
     pendingReplacement = {
-      mode, savedRaw, current, previous,
+      mode, item, savedRaw, current, previous,
       data,
     };
+    byId('delete-scope-fields').hidden = mode !== 'delete' || !item?.seriesId;
+    byId('delete-scope').value = scope;
     byId('reset-title').textContent = deletingLoan ? 'Удалить заём?' : mode === 'delete' ? 'Удалить операцию?'
       : mode === 'reset' ? 'Сбросить все данные?' : 'Вернуть предыдущие данные?';
     let description = mode === 'reset'
@@ -1212,12 +1217,23 @@ function openReplacement(mode, item = null) {
     if (mode === 'delete') {
       description = '«' + item.title + '» · ' + dailyDate(item.date) + ' · ' + money(Math.abs(item.amount))
         + '. Запись исчезнет из календаря. Прогноз и дневной лимит пересчитаются.';
+      if (item.seriesId) description += scope === 'series'
+        ? ' Удалятся все даты этой серии, включая прошлые записи и оплаты.'
+        : ' Удалится только эта дата. Остальные повторы сохранятся.';
+      if (item.loanId) description += item.loanFee
+        ? ' Удалится только плата за перенос. Новый срок займа сохранится; сам перенос можно отменить в карточке займа.'
+        : ' Удалится только эта операция. Карточка займа и остальные записи сохранятся. Это не погашение долга.';
       if (item.paidAmount) {
         description += ' Отметки оплаты или получения тоже удалятся.';
         const before = actualBalance(state, today);
         const after = actualBalance(data, today);
         if (before !== null && before !== after) description += ' Расчётный остаток: ' + money(before) + ' → ' + money(after) + '.';
         else description += ' Оплата уже учтена во введённом остатке. Если отметка была ошибочной, проверь «Сколько сейчас есть».';
+      }
+      if (scope === 'series') {
+        const before = actualBalance(state, today);
+        const after = actualBalance(data, today);
+        description += ' Расчётный остаток: ' + money(before) + ' → ' + money(after) + '.';
       }
     }
     if (deletingLoan) {
@@ -1229,10 +1245,10 @@ function openReplacement(mode, item = null) {
       description += ' Это удаление ошибочной записи, а не погашение займа. Если деньги действительно получены или потрачены, проверь «Сколько сейчас есть».';
     }
     byId('reset-description').textContent = description;
-    byId('confirm-reset').textContent = deletingLoan ? 'Удалить заём' : mode === 'delete' ? 'Удалить операцию' : mode === 'reset' ? 'Сбросить данные' : 'Вернуть данные';
+    byId('confirm-reset').textContent = deletingLoan ? 'Удалить заём' : mode === 'delete' ? scope === 'series' ? 'Удалить всю серию' : 'Удалить операцию' : mode === 'reset' ? 'Сбросить данные' : 'Вернуть данные';
     byId('confirm-reset').classList.toggle('danger-button', mode !== 'undo');
     byId('reset-error').hidden = true;
-    resetDialog.showModal();
+    if (!resetDialog.open) resetDialog.showModal();
   } catch (error) {
     pendingReplacement = null;
     backupError('Не удалось подготовить замену данных. ' + error.message);
@@ -1240,6 +1256,9 @@ function openReplacement(mode, item = null) {
 }
 
 byId('reset-data').addEventListener('click', () => openReplacement('reset'));
+byId('delete-scope').addEventListener('change', (event) => {
+  if (pendingReplacement?.mode === 'delete') openReplacement('delete', pendingReplacement.item, event.target.value);
+});
 byId('undo-import').addEventListener('click', () => openReplacement('undo'));
 byId('cancel-reset').addEventListener('click', () => resetDialog.close());
 resetDialog.addEventListener('close', () => {

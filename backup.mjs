@@ -1,7 +1,7 @@
-import { amountIsValid, cents, dateIsValid, debt, debtIds, scheduleFor, utc, budgetCategories } from './model.mjs?v=0.1.3';
+import { amountIsValid, cents, dateIsValid, debt, debtIds, scheduleFor, utc, budgetCategories } from './model.mjs?v=0.1.4';
 
 export const backupApp = 'kalendar-deneg';
-export const backupVersion = 3;
+export const backupVersion = 4;
 
 export function planData(state) {
   return {
@@ -20,6 +20,7 @@ export function planData(state) {
     budgets: state.budgets ?? {},
     cancellations: state.cancellations ?? {},
     operationChanges: state.operationChanges ?? [],
+    deletedOperations: state.deletedOperations ?? {},
   };
 }
 
@@ -151,7 +152,7 @@ export function validatePlan(input) {
   }
   unique(data.loans.map(({ id }) => id));
   const baseState = { ...data, customExpenses: [], loans: [], edits: {}, payments: {}, installments: {}, showDemo: true };
-  const definitions = new Map(scheduleFor(baseState, 'pay', '2026-12').map((item) => [item.id, item]));
+  const definitions = new Map(scheduleFor(baseState, 'pay', '2026-12', true).map((item) => [item.id, item]));
   definitions.set(debtIds.extended, { id: debtIds.extended, amount: -terms.amount, date: data.extensionDate });
   definitions.set(debtIds.fee, { id: debtIds.fee, amount: -terms.fee, date: terms.date });
   unique([...definitions.keys(), ...operationIds]);
@@ -176,6 +177,12 @@ export function validatePlan(input) {
     return source;
   }
 
+  for (const [id, deleted] of Object.entries(object(data.deletedOperations))) {
+    operation(id);
+    requireValue(deleted === true, 'Некорректная отметка удаления операции.');
+    requireValue(!data.payments[id] && !data.installments[id]?.length && !data.cancellations[id]
+      && !list(data.operationChanges).some((entry) => entry.operationId === id), 'У удалённой операции остались оплаты.');
+  }
   for (const [id, edit] of Object.entries(object(data.edits))) {
     const source = operation(id);
     object(edit);
@@ -265,10 +272,10 @@ export function parseBackup(contents) {
   }
   object(backup);
   requireValue(backup.app === backupApp, 'Это не резервная копия «Календаря денег».');
-  requireValue([1, 2, backupVersion].includes(backup.schemaVersion), 'Версия резервной копии пока не поддерживается.');
+  requireValue([1, 2, 3, backupVersion].includes(backup.schemaVersion), 'Версия резервной копии пока не поддерживается.');
   requireValue(typeof backup.createdAt === 'string' && Number.isFinite(Date.parse(backup.createdAt)));
   object(backup.data);
-  requireValue(Object.keys(planData({})).filter((key) => (backup.schemaVersion !== 1 || key !== 'budgets') && (backup.schemaVersion >= 3 || !['cancellations', 'operationChanges'].includes(key))).every((key) => Object.hasOwn(backup.data, key)), 'В копии отсутствует часть данных.');
+  requireValue(Object.keys(planData({})).filter((key) => (backup.schemaVersion !== 1 || key !== 'budgets') && (backup.schemaVersion >= 3 || !['cancellations', 'operationChanges'].includes(key)) && (backup.schemaVersion >= 4 || key !== 'deletedOperations')).every((key) => Object.hasOwn(backup.data, key)), 'В копии отсутствует часть данных.');
   return { ...backup, data: validatePlan(backup.data) };
 }
 
