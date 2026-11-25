@@ -1,4 +1,4 @@
-import { cashEntries, scheduleFor } from './model.mjs';
+import { scheduleFor } from './model.mjs';
 import { planData, validatePlan } from './backup.mjs';
 
 export function canDeleteOperation(item) {
@@ -12,11 +12,31 @@ export function removeCustomOperation(state, operationId) {
   const item = scheduleFor(state).find(({ id }) => id === operationId);
   if (!canDeleteOperation(item)) throw new Error('Можно удалить только свою отдельную операцию.');
   const data = JSON.parse(JSON.stringify(planData(state)));
-  const receipts = new Set(cashEntries(item).map(({ id }) => id));
-  receipts.add(operationId);
   data.customExpenses = data.customExpenses.filter(({ id }) => id !== operationId);
-  for (const key of ['edits', 'payments', 'installments', 'cancellations']) delete data[key][operationId];
-  data.operationChanges = data.operationChanges.filter((entry) => entry.operationId !== operationId);
-  if (data.snapshot) data.snapshot.paidIds = data.snapshot.paidIds.filter((id) => !receipts.has(id));
+  removeOperationRecords(data, new Set([operationId]));
   return validatePlan(data);
+}
+
+export function removeLoan(state, loanId) {
+  const loan = state.loans?.find(({ id }) => id === loanId);
+  if (!loan) throw new Error('Заём не найден.');
+  const data = JSON.parse(JSON.stringify(planData(state)));
+  const operationIds = new Set([loanId + '/in', loanId + '/out', ...(loan.extensions ?? []).map(({ id }) => id)]);
+  data.loans = data.loans.filter(({ id }) => id !== loanId);
+  removeOperationRecords(data, operationIds);
+  return validatePlan(data);
+}
+
+function removeOperationRecords(data, operationIds) {
+  const receipts = new Set(operationIds);
+  for (const id of operationIds) {
+    for (const entry of data.installments[id] ?? []) receipts.add(entry.id);
+    for (const key of ['edits', 'payments', 'installments', 'cancellations']) delete data[key][id];
+  }
+  data.operationChanges = data.operationChanges.filter((entry) => {
+    if (!operationIds.has(entry.operationId)) return true;
+    receipts.add(entry.id);
+    return false;
+  });
+  if (data.snapshot) data.snapshot.paidIds = data.snapshot.paidIds.filter((id) => !receipts.has(id));
 }

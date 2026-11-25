@@ -1,5 +1,5 @@
 import { backupCounts, createBackup, parseBackup, planData, writeRestoredPlan } from './backup.mjs';
-import { canDeleteOperation, removeCustomOperation } from './operations.mjs';
+import { canDeleteOperation, removeCustomOperation, removeLoan } from './operations.mjs?v=0.1.2';
 import {
   actualBalance, amountIsValid, dateAt, dateIsValid, daysInMonth, debtIds, debtTerms, firstMonth,
   forecast, localDate, lockedScenario, maxDate, minDate, money, nextDay, scheduleFor, shiftMonth,
@@ -242,6 +242,10 @@ function renderLoans() {
     const jump = appendText(buttons, 'button', 'Открыть дату', 'text-button');
     jump.type = 'button';
     jump.addEventListener('click', () => selectDay(loanDueDate(loan), true));
+    const remove = appendText(buttons, 'button', 'Удалить заём', 'text-button');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', 'Удалить заём — ' + loan.title);
+    remove.addEventListener('click', () => { syncToday(); openReplacement('delete-loan', loan); });
     if (repayment.remaining) {
       const pay = appendText(buttons, 'button', 'Внести платёж', 'text-button');
       pay.type = 'button';
@@ -647,8 +651,8 @@ function focusOperation(id, action) {
   const button = [...byId('day-operations').querySelectorAll('[data-operation]')].find(
     (option) => option.dataset.operation === id && option.dataset.action === action,
   );
-  if (button) button.focus();
-  else calendar.querySelector('[aria-pressed="true"]')?.focus();
+  if (button) button.focus({ preventScroll: true });
+  else calendar.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
 }
 
 function savePlan(item, date, amount) {
@@ -754,12 +758,13 @@ paidDate.addEventListener('input', updateIncludedOption);
 paidAmount.addEventListener('input', () => paidAmount.setCustomValidity(''));
 byId('cancel-operation').addEventListener('click', () => dialog.close());
 dialog.addEventListener('close', () => {
-  editing?.trigger.focus();
+  editing?.trigger?.focus({ preventScroll: true });
   editing = null;
 });
 
 operationForm.addEventListener('submit', (event) => {
   event.preventDefault();
+  const pagePosition = { top: window.scrollY, left: window.scrollX };
   if (!editing) return;
   const { item, mode, partial } = editing;
   let target;
@@ -795,6 +800,7 @@ operationForm.addEventListener('submit', (event) => {
   dialog.close();
   selectDay(target);
   focusOperation(item.id, mode);
+  window.scrollTo({ ...pagePosition, behavior: 'instant' });
 });
 
 expenseTemplate.addEventListener('change', () => {
@@ -849,6 +855,7 @@ expenseStatus.addEventListener('change', updateExpenseStatus);
 
 expenseForm.addEventListener('submit', (event) => {
   event.preventDefault();
+  const pagePosition = { top: window.scrollY, left: window.scrollX };
   syncToday();
   updateExpenseStatus();
   const title = expenseName.value.trim();
@@ -888,6 +895,7 @@ expenseForm.addEventListener('submit', (event) => {
   expenseDialog.close();
   selectDay(date);
   focusOperation(id, 'edit');
+  window.scrollTo({ ...pagePosition, behavior: 'instant' });
 });
 
 for (const button of document.querySelectorAll('[data-view]')) {
@@ -1188,18 +1196,19 @@ function openReplacement(mode, item = null) {
     }
     const previous = window.localStorage.getItem(rollbackKey);
     if (mode === 'undo' && !previous) return;
-    const data = mode === 'delete' ? removeCustomOperation(state, item.id)
+    const deletingLoan = mode === 'delete-loan';
+    const data = deletingLoan ? removeLoan(state, item.id) : mode === 'delete' ? removeCustomOperation(state, item.id)
       : mode === 'reset' ? emptyPlan : parseBackup(previous).data;
     // Capture both browser and in-memory data so a pending confirmation cannot overwrite newer edits.
     pendingReplacement = {
       mode, savedRaw, current, previous,
       data,
     };
-    byId('reset-title').textContent = mode === 'delete' ? 'Удалить операцию?'
+    byId('reset-title').textContent = deletingLoan ? 'Удалить заём?' : mode === 'delete' ? 'Удалить операцию?'
       : mode === 'reset' ? 'Сбросить все данные?' : 'Вернуть предыдущие данные?';
     let description = mode === 'reset'
       ? 'Очистятся операции за все даты, займы, оплаты, шаблоны, бюджеты и введённый остаток. Откроется пустой календарь на сегодня с нулевым прогнозом. Тестовый пример будет выключен.'
-      : 'Текущий календарь будет заменён набором записей, который был до последнего удаления операции, сброса или восстановления из файла. Изменения, внесённые после этого, тоже будут отменены.';
+      : 'Текущий календарь будет заменён набором записей, который был до последнего удаления операции или займа, сброса или восстановления из файла. Изменения, внесённые после этого, тоже будут отменены.';
     if (mode === 'delete') {
       description = '«' + item.title + '» · ' + dailyDate(item.date) + ' · ' + money(Math.abs(item.amount))
         + '. Запись исчезнет из календаря. Прогноз и дневной лимит пересчитаются.';
@@ -1211,8 +1220,16 @@ function openReplacement(mode, item = null) {
         else description += ' Оплата уже учтена во введённом остатке. Если отметка была ошибочной, проверь «Сколько сейчас есть».';
       }
     }
+    if (deletingLoan) {
+      description = '«' + item.title + '» · получено ' + money(item.received) + ' · к возврату ' + money(item.repay)
+        + '. Удалятся карточка займа, поступление денег, обязательство возврата, внесённые платежи и все переносы. Прогноз и дневной лимит пересчитаются.';
+      const before = actualBalance(state, today);
+      const after = actualBalance(data, today);
+      if (before !== null && before !== after) description += ' Расчётный остаток: ' + money(before) + ' → ' + money(after) + '.';
+      description += ' Это удаление ошибочной записи, а не погашение займа. Если деньги действительно получены или потрачены, проверь «Сколько сейчас есть».';
+    }
     byId('reset-description').textContent = description;
-    byId('confirm-reset').textContent = mode === 'delete' ? 'Удалить операцию' : mode === 'reset' ? 'Сбросить данные' : 'Вернуть данные';
+    byId('confirm-reset').textContent = deletingLoan ? 'Удалить заём' : mode === 'delete' ? 'Удалить операцию' : mode === 'reset' ? 'Сбросить данные' : 'Вернуть данные';
     byId('confirm-reset').classList.toggle('danger-button', mode !== 'undo');
     byId('reset-error').hidden = true;
     resetDialog.showModal();
@@ -1248,12 +1265,14 @@ byId('confirm-reset').addEventListener('click', () => {
   }
   resetDialog.close();
   syncToday();
-  showLoadedPlan(data, mode === 'delete'
+  showLoadedPlan(data, mode === 'delete-loan'
+    ? 'Заём удалён вместе с платежами и переносами. Расчёты обновлены. Можно нажать «Вернуть предыдущие данные».'
+    : mode === 'delete'
     ? 'Операция удалена. Прогноз и дневной лимит пересчитаны. Можно нажать «Вернуть предыдущие данные».'
     : mode === 'reset'
     ? 'Данные сброшены. Можно начать новый тест или нажать «Вернуть предыдущие данные».'
     : 'Предыдущие данные возвращены. Заменённый набор тоже можно вернуть этой кнопкой.');
-  byId(mode === 'reset' ? 'reset-data' : 'undo-import').focus();
+  byId(mode === 'reset' ? 'reset-data' : 'undo-import').focus({ preventScroll: true });
 });
 updateUndoRestore();
 
