@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Календарь доходов, расходов и платежей по долгам.">
   <title>Календарь денег</title>
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=0.1.5">
 </head>
 <body>
   <header class="topbar">
     <div class="wrap topbar-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>Календарь денег</div>
-      <span class="release-version">Тестовая версия 0.1.4</span>
+      <span class="release-version">Тестовая версия 0.1.5</span>
       <span class="test-badge" id="test-badge"><i aria-hidden="true"></i> Тестовые данные</span>
     </div>
   </header>
@@ -53,7 +53,14 @@
           <h2 id="daily-title">Сколько можно потратить сегодня</h2>
           <p class="subtle">Дополнительно к расходам, уже внесённым в календарь.</p>
         </div>
-        <span class="daily-cycle-badge">До ближайшего поступления</span>
+        <div class="daily-horizon">
+          <label for="daily-days">Период расчёта</label>
+          <select id="daily-days">
+            <option value="30">30 дней</option>
+            <option value="60">60 дней</option>
+            <option value="90">90 дней</option>
+          </select>
+        </div>
       </div>
       <div class="daily-grid" aria-live="polite">
         <div>
@@ -66,18 +73,14 @@
           <p class="subtle" id="daily-income"></p>
           <p class="subtle" id="daily-overdue" hidden></p>
           <button class="text-button" id="daily-jump" type="button" hidden>Открыть день в календаре</button>
-          <div class="daily-later" id="daily-later" hidden>
-            <p id="daily-later-message"></p>
-            <button class="text-button" id="daily-later-jump" type="button">Открыть будущий платёж</button>
-          </div>
         </div>
       </div>
       <details class="daily-help">
         <summary>Как считается лимит</summary>
-        <p>Из текущего остатка выделяются деньги на платежи и запланированные траты до ближайшего поступления. Свободная сумма равномерно распределяется на оставшиеся дни, включая сегодня. День поступления относится уже к следующему периоду.</p>
-        <p>Пример: сейчас 1 000 ₽, через 5 дней доход, до него платёж 500 ₽. На дополнительные траты остаётся 500 ₽, то есть 100 ₽ в день. Уже внесённые в календарь расходы повторно вычитать из лимита не нужно.</p>
-        <p>В день поступления отметь получение денег: новый расчёт учтёт фактический остаток и платежи до следующего дохода. Если доход задержится, измени его дату. Если ближайший доход не задан, добавь его в календарь.</p>
-        <p>Также учитывается заданный резерв. Отдельное предупреждение проверяет платежи на 30 дней после ближайшего поступления с учётом трат по текущему лимиту и запланированных доходов.</p>
+        <p>Выбери 30, 60 или 90 дней. Система проверяет остаток на каждую дату, учитывает текущие деньги, все поступления, платежи, запланированные траты и резервы внутри этого периода. Лимит ограничивает самый трудный день, даже если итоговый остаток периода положительный.</p>
+        <p>Пример: сейчас 1 000 ₽, через 5 дней доход 1 000 ₽, через 2 дня платёж 500 ₽, а через 10 дней ещё платёж 1 000 ₽. На дополнительные траты за 30 дней остаётся 500 ₽ — лимит 16,66 ₽ в день.</p>
+        <p>Доходы с прошедшей датой и неполученный доход за сегодня не считаются доступными деньгами. Отмечай получение доходов и оплату расходов, меняй дату при задержке — расчёт обновится. Лимит работает и без будущих поступлений.</p>
+        <p>Сумма указана дополнительно к тратам в календаре. Если даже без дополнительных покупок денег не хватает, появится нулевой лимит с датой и суммой нехватки. Расчёт защищает выбранный период по внесённым данным.</p>
       </details>
     </section>
 
@@ -256,7 +259,9 @@
             <option value="once">Один раз</option>
             <option value="daily">Каждый день</option>
             <option value="weekly">Каждую неделю</option>
+            <option value="monthly">Каждый месяц</option>
           </select>
+          <p class="subtle" id="monthly-repeat-help" hidden>Если нужного числа нет в месяце, платёж попадёт на его последний день. Затем сохранится исходное число.</p>
           <div id="repeat-end-fields" hidden>
             <label for="expense-repeat-end">Последняя дата, если нужна</label>
             <input type="date" id="expense-repeat-end" min="1900-01-01" max="9999-12-31">
@@ -343,13 +348,13 @@
     </div>
   </dialog>
   <footer class="wrap testing-footer">
-    <div><strong>Помоги улучшить календарь</strong><p>Тестовая версия 0.1.4 · Записи сохраняются только в твоём браузере.</p></div>
+    <div><strong>Помоги улучшить календарь</strong><p>Тестовая версия 0.1.5 · Записи сохраняются только в твоём браузере.</p></div>
     <div class="form-actions">
       <a class="secondary" href="https://github.com/Chumarov00/kalendar-deneg/issues/new?template=bug_report.yml" target="_blank" rel="noopener noreferrer">Сообщить об ошибке</a>
       <a class="secondary" href="https://github.com/Chumarov00/kalendar-deneg/issues/new?template=feature_request.yml" target="_blank" rel="noopener noreferrer">Предложить улучшение</a>
     </div>
     <p>Для отправки нужен аккаунт GitHub. Опиши действия, ожидаемый результат и результат на экране. Укажи телефон и браузер. Обращения публичные: используй примерные суммы и скрывай личные данные на скриншотах.</p>
   </footer>
-  <script type="module" src="./app.mjs?v=0.1.4"></script>
+  <script type="module" src="./app.mjs?v=0.1.5"></script>
 </body>
 </html>

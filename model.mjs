@@ -49,6 +49,25 @@ export function nextDay(day) {
   return iso(date);
 }
 
+function monthlyDate(start, offset) {
+  const index = Number(start.slice(0, 4)) * 12 + Number(start.slice(5, 7)) - 1 + offset;
+  if (index < 1900 * 12 || index >= 10000 * 12) return '';
+  const month = String(Math.floor(index / 12)).padStart(4, '0') + '-' + String(index % 12 + 1).padStart(2, '0');
+  return dateAt(month, Math.min(Number(start.slice(8)), daysInMonth(month)));
+}
+
+export function repeatDateIsValid(source, date) {
+  if (!dateIsValid(date) || date < source.date || (source.repeatEnd && date > source.repeatEnd)) return false;
+  if (source.repeat === 'monthly') {
+    const offset = (Number(date.slice(0, 4)) - Number(source.date.slice(0, 4))) * 12
+      + Number(date.slice(5, 7)) - Number(source.date.slice(5, 7));
+    return date === monthlyDate(source.date, offset);
+  }
+  if (!['daily', 'weekly'].includes(source.repeat)) return false;
+  const days = Math.round((utc(date) - utc(source.date)) / 86400000);
+  return source.repeat !== 'weekly' || days % 7 === 0;
+}
+
 export function payday(month, day) {
   const date = utc(dateAt(month, day));
   const weekday = date.getUTCDay();
@@ -142,6 +161,7 @@ export function scheduleFor(state, scenario = lockedScenario(state) || state.sce
     }
     const end = item.repeatEnd && item.repeatEnd < through ? item.repeatEnd : through;
     const cursor = utc(item.date);
+    let monthOffset = 0;
     const step = item.repeat === 'weekly' ? 7 : 1;
     const generated = new Set();
     while (cursor.getUTCFullYear() <= 9999 && iso(cursor) <= end) {
@@ -149,7 +169,11 @@ export function scheduleFor(state, scenario = lockedScenario(state) || state.sce
       const id = date === item.date ? item.id : item.id + '@' + date;
       records.push({ ...item, date, id, ...state.edits?.[id], custom: true, seriesId: item.id });
       generated.add(id);
-      cursor.setUTCDate(cursor.getUTCDate() + step);
+      if (item.repeat === 'monthly') {
+        const next = monthlyDate(item.date, ++monthOffset);
+        if (!next) break;
+        cursor.setTime(utc(next).getTime());
+      } else cursor.setUTCDate(cursor.getUTCDate() + step);
     }
     // A future occurrence may already have an actual payment or a cancellation.
     const recordedIds = new Set([
@@ -159,9 +183,7 @@ export function scheduleFor(state, scenario = lockedScenario(state) || state.sce
     for (const id of recordedIds) {
       if (generated.has(id) || !id.startsWith(item.id + '@')) continue;
       const date = id.slice(item.id.length + 1);
-      if (!dateIsValid(date) || date <= item.date || (item.repeatEnd && date > item.repeatEnd)) continue;
-      const days = Math.round((utc(date) - utc(item.date)) / 86400000);
-      if (days % step) continue;
+      if (date <= item.date || !repeatDateIsValid(item, date)) continue;
       records.push({ ...item, date, id, ...state.edits?.[id], custom: true, seriesId: item.id });
     }
   }
@@ -327,15 +349,24 @@ export function incomeCycleAllowance(state, today) {
   const records = scheduleFor(state, undefined, through.slice(0, 7));
   const known = new Set(records.map(({ id }) => id));
   for (const source of state.customExpenses ?? []) {
-    if (source.amount <= 0 || !['daily', 'weekly'].includes(source.repeat)) continue;
+    if (source.amount <= 0 || !['daily', 'weekly', 'monthly'].includes(source.repeat)) continue;
     // All nearby income dates may have been deleted. Find the next surviving
     // repeat beyond the generated window, including a series that starts later.
     const step = source.repeat === 'weekly' ? 7 : 1;
     const generatedEnd = dateAt(through.slice(0, 7), daysInMonth(through.slice(0, 7)));
     const cursor = utc(source.date);
+    let monthOffset = 0;
     if (source.date <= generatedEnd) {
-      const elapsed = Math.floor((utc(generatedEnd) - cursor) / 86400000);
-      cursor.setUTCDate(cursor.getUTCDate() + (Math.floor(elapsed / step) + 1) * step);
+      if (source.repeat === 'monthly') {
+        monthOffset = (Number(generatedEnd.slice(0, 4)) - Number(source.date.slice(0, 4))) * 12
+          + Number(generatedEnd.slice(5, 7)) - Number(source.date.slice(5, 7)) + 1;
+        const next = monthlyDate(source.date, monthOffset);
+        if (!next) continue;
+        cursor.setTime(utc(next).getTime());
+      } else {
+        const elapsed = Math.floor((utc(generatedEnd) - cursor) / 86400000);
+        cursor.setUTCDate(cursor.getUTCDate() + (Math.floor(elapsed / step) + 1) * step);
+      }
     }
     while (cursor.getUTCFullYear() <= 9999) {
       const date = iso(cursor);
@@ -347,7 +378,11 @@ export function incomeCycleAllowance(state, today) {
         if (!known.has(id)) records.push({ ...item, ...payment, corrections: [] });
         break;
       }
-      cursor.setUTCDate(cursor.getUTCDate() + step);
+      if (source.repeat === 'monthly') {
+        const next = monthlyDate(source.date, ++monthOffset);
+        if (!next) break;
+        cursor.setTime(utc(next).getTime());
+      } else cursor.setUTCDate(cursor.getUTCDate() + step);
     }
   }
   const incomeDates = new Map();

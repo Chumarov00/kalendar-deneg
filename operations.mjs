@@ -1,5 +1,5 @@
-import { dateIsValid, scheduleFor } from './model.mjs?v=0.1.4';
-import { planData, validatePlan } from './backup.mjs?v=0.1.4';
+import { dateIsValid, scheduleFor } from './model.mjs?v=0.1.5';
+import { planData, validatePlan } from './backup.mjs?v=0.1.5';
 
 export function canDeleteOperation(item) {
   return typeof item?.id === 'string' && Boolean(item.id);

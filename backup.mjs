@@ -1,7 +1,7 @@
-import { amountIsValid, cents, dateIsValid, debt, debtIds, scheduleFor, utc, budgetCategories } from './model.mjs?v=0.1.4';
+import { amountIsValid, cents, dateIsValid, debt, debtIds, scheduleFor, utc, budgetCategories, repeatDateIsValid } from './model.mjs?v=0.1.5';
 
 export const backupApp = 'kalendar-deneg';
-export const backupVersion = 4;
+export const backupVersion = 5;
 
 export function planData(state) {
   return {
@@ -110,7 +110,7 @@ export function validatePlan(input) {
     date(item.date);
     if (item.kind !== undefined) requireValue(['expense', 'income', 'payment'].includes(item.kind));
     if (item.mandatory !== undefined) requireValue(typeof item.mandatory === 'boolean');
-    if (item.repeat !== undefined) requireValue(['once', 'daily', 'weekly'].includes(item.repeat));
+    if (item.repeat !== undefined) requireValue(['once', 'daily', 'weekly', 'monthly'].includes(item.repeat));
     if (item.repeatEnd) {
       date(item.repeatEnd);
       requireValue(item.repeatEnd >= item.date);
@@ -170,10 +170,9 @@ export function validatePlan(input) {
     const separator = id.lastIndexOf('@');
     const source = definitions.get(id.slice(0, separator));
     const occurrence = id.slice(separator + 1);
-    requireValue(source && ['daily', 'weekly'].includes(source.repeat) && dateIsValid(occurrence));
+    requireValue(source && ['daily', 'weekly', 'monthly'].includes(source.repeat) && dateIsValid(occurrence));
     const days = Math.round((utc(occurrence) - utc(source.date)) / 86400000);
-    requireValue(days > 0 && (source.repeat !== 'weekly' || days % 7 === 0));
-    requireValue(!source.repeatEnd || occurrence <= source.repeatEnd);
+    requireValue(days > 0 && repeatDateIsValid(source, occurrence));
     return source;
   }
 
@@ -272,7 +271,7 @@ export function parseBackup(contents) {
   }
   object(backup);
   requireValue(backup.app === backupApp, 'Это не резервная копия «Календаря денег».');
-  requireValue([1, 2, 3, backupVersion].includes(backup.schemaVersion), 'Версия резервной копии пока не поддерживается.');
+  requireValue([1, 2, 3, 4, backupVersion].includes(backup.schemaVersion), 'Версия резервной копии пока не поддерживается.');
   requireValue(typeof backup.createdAt === 'string' && Number.isFinite(Date.parse(backup.createdAt)));
   object(backup.data);
   requireValue(Object.keys(planData({})).filter((key) => (backup.schemaVersion !== 1 || key !== 'budgets') && (backup.schemaVersion >= 3 || !['cancellations', 'operationChanges'].includes(key)) && (backup.schemaVersion >= 4 || key !== 'deletedOperations')).every((key) => Object.hasOwn(backup.data, key)), 'В копии отсутствует часть данных.');

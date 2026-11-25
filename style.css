@@ -230,8 +230,9 @@ dialog .form-actions{margin-top:15px}
 .daily-help p{margin-top:9px;max-width:95ch}
 @media(max-width:580px){.daily-heading{flex-wrap:wrap}.daily-grid{grid-template-columns:1fr}.daily-value strong{font-size:36px}}
 
-.daily-cycle-badge{flex:none;border:1px solid #c4d9c8;border-radius:20px;background:#fff;padding:6px 11px;font-size:14px;font-weight:650}
-.daily-later{margin-top:12px;padding:11px;border:1px solid #efcfca;border-radius:10px;background:var(--red-light);color:var(--red);font-size:14px}
+.daily-horizon{flex:none;min-width:155px;display:grid;gap:5px}
+.daily-horizon label{font-size:14px;font-weight:650}
+.daily-horizon select{width:100%;min-height:44px;font-size:16px}
 
 .release-version{font-size:14px;color:var(--muted);margin-left:auto}
 .topbar-inner{flex-wrap:wrap;padding-top:10px;padding-bottom:10px}

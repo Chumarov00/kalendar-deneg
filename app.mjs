@@ -1,10 +1,10 @@
-import { backupCounts, createBackup, parseBackup, planData, writeRestoredPlan } from './backup.mjs?v=0.1.4';
-import { canDeleteOperation, removeOperation, removeLoan } from './operations.mjs?v=0.1.4';
+import { backupCounts, createBackup, parseBackup, planData, writeRestoredPlan } from './backup.mjs?v=0.1.5';
+import { canDeleteOperation, removeOperation, removeLoan } from './operations.mjs?v=0.1.5';
 import {
   actualBalance, amountIsValid, dateAt, dateIsValid, daysInMonth, debtIds, debtTerms, firstMonth,
   forecast, localDate, lockedScenario, maxDate, minDate, money, nextDay, scheduleFor, shiftMonth,
-  utc, validExtensionDate, cents, loanDueDate, budgetCategories, monthlyBudget, cashEntries, canCancelPurchase, setPurchaseCancelled, incomeCycleAllowance,
-} from './model.mjs?v=0.1.4';
+  utc, validExtensionDate, cents, loanDueDate, budgetCategories, monthlyBudget, cashEntries, canCancelPurchase, setPurchaseCancelled, dailyAllowance,
+} from './model.mjs?v=0.1.5';
 
 const byId = (id) => document.getElementById(id);
 const monthName = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' });
@@ -57,6 +57,11 @@ const state = {
   opening: 0, scenario: 'pay', extensionDate: '', edits: {}, payments: {}, debtTerms: {}, snapshot: null, customExpenses: [], expenseTemplates: [], showDemo: false, installments: {}, loans: [], budgets: {}, cancellations: {}, operationChanges: [], deletedOperations: {},
   ...loadSavedPlan(), month: today.slice(0, 7), selected: today, view: 'grid',
 };
+let dailyDays = 30;
+try {
+  const savedDays = Number(window.localStorage.getItem('money-calendar:daily-days:v1'));
+  if ([30, 60, 90].includes(savedDays)) dailyDays = savedDays;
+} catch { /* The default period works when browser storage is unavailable. */ }
 
 function persist(message = '') {
   try {
@@ -173,7 +178,7 @@ function renderDetails(record) {
     const row = appendText(operations, 'div', '', 'operation');
     const name = appendText(row, 'dt', item.title);
     appendText(name, 'small', item.category);
-    if (item.seriesId) appendText(name, 'small', item.repeat === 'daily' ? 'Каждый день' : 'Каждую неделю');
+    if (item.seriesId) appendText(name, 'small', { daily: 'Каждый день', weekly: 'Каждую неделю', monthly: 'Каждый месяц' }[item.repeat]);
     if (item.cancelled) {
       row.classList.add('cancelled-operation');
       appendText(name, 'small', item.seriesId ? 'Покупка на эту дату отменена' : 'Покупка отменена', 'cancelled-label');
@@ -358,12 +363,12 @@ document.querySelector('.budget-panel').addEventListener('input', (event) => {
 });
 
 function renderDailyAllowance() {
-  const limit = incomeCycleAllowance(state, today);
+  const limit = dailyAllowance(state, today, dailyDays);
+  byId('daily-days').value = String(dailyDays);
   const amount = byId('daily-amount');
   const message = byId('daily-message');
   const income = byId('daily-income');
   const jump = byId('daily-jump');
-  const later = byId('daily-later');
   const breakdown = byId('daily-breakdown');
   const dayWord = (days) => {
     const n = days % 100;
@@ -371,55 +376,49 @@ function renderDailyAllowance() {
   };
   byId('daily-range').textContent = limit.end
     ? dailyDate(limit.start) + ' — ' + dailyDate(limit.end) + ' · ' + limit.days + ' ' + dayWord(limit.days) + ', включая сегодня'
-    : 'До следующего дохода';
+    : 'Выбранный период';
   byId('daily-overdue').hidden = !limit.overdueIncome;
   byId('daily-overdue').textContent = 'Неполученные доходы с прошедшей датой (' + money(limit.overdueIncome) + ') в лимит не включены. Обнови дату или отметь получение.';
   jump.hidden = true;
-  later.hidden = true;
   breakdown.hidden = true;
   message.classList.toggle('negative', limit.status === 'shortfall');
   amount.classList.toggle('negative', limit.status === 'shortfall');
   income.textContent = limit.nextIncome
     ? (limit.nextIncome.date === today ? 'Ожидается сегодня: ' : 'Ближайшее поступление: ' + dailyDate(limit.nextIncome.date) + ' · ')
-      + money(limit.nextIncome.amount) + (limit.nextIncome.date === today ? '. Отметь получение — начнётся новый период.' : '.')
-    : '';
+      + money(limit.nextIncome.amount) + (limit.nextIncome.date === today ? '. После отметки получения лимит пересчитается.' : '.')
+    : 'Плановых поступлений в выбранном периоде нет. Расчёт идёт из текущих денег.';
   if (limit.amount === null) {
     amount.textContent = '—';
     message.textContent = limit.status === 'incomplete'
       ? 'Укажи новую дату возврата тестового долга, чтобы учесть все платежи.'
-      : limit.status === 'needs-income'
-        ? 'Добавь ближайшее поступление в календарь: его дату и сумму. Тогда рассчитаю, сколько можно тратить до него.'
-        : 'Сначала сохрани, сколько денег у тебя сейчас, в блоке выше.';
+      : 'Проверь данные календаря для расчёта лимита.';
     return;
   }
   amount.textContent = money(limit.amount);
   if (limit.shortfall) {
-    message.textContent = 'До ближайшего поступления на запланированные расходы' + (limit.shortfall.reserve ? ' и резерв' : '')
+    message.textContent = 'В выбранном периоде на запланированные расходы' + (limit.shortfall.reserve ? ' и резерв' : '')
       + ' не хватает ' + money(limit.shortfall.amount) + ' к ' + dailyDate(limit.shortfall.date)
       + '. Дополнительные траты пока не помещаются.';
     jump.dataset.date = limit.shortfall.date;
     jump.hidden = false;
   } else {
-    message.textContent = limit.nextIncome.date === today
-      ? 'До получения сегодняшнего дохода лимит учитывает текущие деньги и расходы на сегодня.'
-      : 'Такую сумму можно дополнительно тратить каждый день до ближайшего поступления.';
+    message.textContent = 'Такую сумму можно дополнительно тратить ежедневно в выбранном периоде, чтобы по внесённому плану остаток не уходил в минус.';
     message.textContent += (limit.constraint < limit.end ? ' Лимит ограничен остатком на ' + dailyDate(limit.constraint) + '.' : '')
       + (limit.reserve ? ' Учтён резерв: ' + money(limit.reserve) + '.' : '');
     breakdown.hidden = false;
-    breakdown.textContent = 'После платежей, запланированных трат и резерва до поступления остаётся ' + money(limit.available)
-      + ' на ' + limit.days + ' ' + dayWord(limit.days) + '.';
-  }
-  if (limit.laterShortfall) {
-    later.hidden = false;
-    byId('daily-later-message').textContent = 'После ближайшего поступления есть риск нехватки: '
-      + money(limit.laterShortfall.amount) + ' к ' + dailyDate(limit.laterShortfall.date)
-      + '. Для этого будущего платежа потребуется сохранить больше денег или изменить план.';
-    byId('daily-later-jump').dataset.date = limit.laterShortfall.date;
+    breakdown.textContent = 'Проверены все ' + limit.days + ' ' + dayWord(limit.days)
+      + '. Учтены текущие деньги, поступления, обязательные платежи, запланированные траты и резервы.';
   }
 }
 
 byId('daily-jump').addEventListener('click', (event) => selectDay(event.currentTarget.dataset.date, true));
-byId('daily-later-jump').addEventListener('click', (event) => selectDay(event.currentTarget.dataset.date, true));
+byId('daily-days').addEventListener('change', (event) => {
+  const days = Number(event.target.value);
+  if (![30, 60, 90].includes(days)) return;
+  dailyDays = days;
+  try { window.localStorage.setItem('money-calendar:daily-days:v1', String(days)); } catch { /* Keep the choice for this session. */ }
+  renderDailyAllowance();
+});
 
 function renderActual() {
   const actual = actualBalance(state, today);
@@ -589,10 +588,11 @@ function openExpense(item, kind = 'expense') {
   expenseStatus.disabled = hasParts;
   expenseIncluded.disabled = hasParts;
   expenseAmount.min = Math.max(0.01, item && state.installments[item.id]?.length ? item.paidAmount : 0);
-  byId('repeat-fields').hidden = Boolean(item) || expenseKind !== 'expense';
-  byId('expense-repeat').disabled = Boolean(item) || expenseKind !== 'expense';
-  byId('expense-repeat-end').disabled = Boolean(item) || expenseKind !== 'expense';
+  byId('repeat-fields').hidden = Boolean(item) || expenseKind === 'income';
+  byId('expense-repeat').disabled = Boolean(item) || expenseKind === 'income';
+  byId('expense-repeat-end').disabled = Boolean(item) || expenseKind === 'income';
   byId('repeat-end-fields').hidden = true;
+  byId('monthly-repeat-help').hidden = true;
   expenseStatus.options[0].textContent = config.fact;
   byId('expense-included-label').lastChild.textContent = ' Эта операция уже учтена в сохранённом остатке';
   renderExpenseTemplates();
@@ -852,6 +852,7 @@ byId('expense-repeat-end').addEventListener('input', (event) => event.target.set
 byId('expense-repeat').addEventListener('change', (event) => {
   byId('expense-repeat-end').setCustomValidity('');
   byId('repeat-end-fields').hidden = event.target.value === 'once';
+  byId('monthly-repeat-help').hidden = event.target.value !== 'monthly';
   if (event.target.value !== 'once') expenseStatus.value = 'planned';
 });
 expenseStatus.addEventListener('change', updateExpenseStatus);
@@ -885,7 +886,7 @@ expenseForm.addEventListener('submit', (event) => {
   const category = expenseKind === 'expense' ? expenseCategory.value : config.category;
   const signedAmount = expenseKind === 'income' ? amount : -amount;
   const expense = { id, title, category, amount: signedAmount, date: planDate, kind: expenseKind, mandatory: expenseKind === 'payment',
-    repeat: !editingExpense && expenseKind === 'expense' ? byId('expense-repeat').value : editingExpense?.repeat ?? 'once',
+    repeat: !editingExpense && expenseKind !== 'income' ? byId('expense-repeat').value : editingExpense?.repeat ?? 'once',
     repeatEnd: !editingExpense ? byId('expense-repeat-end').value : editingExpense.repeatEnd ?? '',
   };
   const index = state.customExpenses.findIndex((item) => item.id === id);
